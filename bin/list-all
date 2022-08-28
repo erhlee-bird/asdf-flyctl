@@ -9,7 +9,7 @@ function sort_versions() {
 }
 
 git ls-remote --tags --refs https://github.com/superfly/flyctl | \
-  sed -E 's|^.*refs/tags/v*\(.*\)$|\1|'                        | \
+  sed -E 's|^.*refs/tags/v*(.*)$|\1|'                          | \
   grep -P "${SEMVER_RE}"                                       | \
   sort_versions                                                | \
   xargs echo
