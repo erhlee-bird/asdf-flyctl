@@ -21,13 +21,6 @@ jobs:
         with:
           command: flyctl version
 
-  debug_osx:
-    runs-on: macos-latest
-
-    steps:
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-
   lint:
     runs-on: ubuntu-latest
 
