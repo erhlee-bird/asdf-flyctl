@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+
+set -e
+set -o pipefail
+
+get_variant() {
+  # https://en.wikipedia.org/wiki/Uname
+
+  case "$(uname -s)" in
+    Linux*)
+      local os="Linux"
+      local archive="tar.gz"
+      ;;
+    Darwin*)
+      local os="MacOS"
+      local archive="tar.gz"
+      ;;
+    CYGWIN*|Windows*)
+      local os="Windows"
+      local archive="zip"
+      ;;
+    *)
+      fail "$(uname -s) is not supported"
+      ;;
+  esac
+
+  case "$(uname -m)" in
+    aarch64|arm64)
+      local arch="arm64"
+      ;;
+    amd64|x86_64)
+      local arch="x86_64"
+      ;;
+    *)
+      fail "$(uname -m) is not supported"
+  esac
+
+  echo "${os}_${arch}.${archive}"
+}
+
+download_release() {
+  local tmp_dir=${1}
+  local version=${2}
+  local url
+  url="https://github.com/superfly/flyctl/releases/download/v${version}/flyctl_${version}_$(get_variant)"
+
+  if test "302" != "$(curl -qsI -o /dev/null -w "%{http_code}" "${url}")"; then
+    echo "Could not find archive at URL ${url}"
+    exit 2
+  fi
+  curl -Lo "${tmp_dir}/$(basename "${url}")" "${url}"
+
+  for f in "${tmp_dir}"/*; do
+    tar -xzvf "${f}" -C "${tmp_dir}" 2>/dev/null
+    unzip "${f}" -d "${tmp_dir}" 2>/dev/null
+  done
+}
+
+install_flyctl() {
+  local install_type=${1}
+  local version=${2}
+  local install_path=${3}
+
+  local tmp_dir
+  tmp_dir="$(mktemp -d -t flyctl_XXXXXXX)"
+  mkdir -p "${install_path}/bin"
+
+  (
+    if [[ "${install_type}" == "version" ]]; then
+      download_release "${tmp_dir}" "${version}"
+      cp "${tmp_dir}/flyctl" "${install_path}/bin/"
+    else
+      git clone --depth 1 --branch "${version}" "https://github.com/superfly/flyctl" "${tmp_dir}/src"
+      cd "${tmp_dir}/src"
+
+      # Refer to Dockerfile.dev for updated build instructions.
+      export CGO_ENABLED=0
+      go mod download
+      cd api && go mod download
+      go build -o "${install_path}/bin/flyctl" -ldflags="-X 'github.com/superfly/flyctl/internal/buildinfo.buildDate=NOW_RFC3339'"
+
+      echo "ERROR: Building and installing from source is not currently supported."
+      exit 1
+    fi
+    :
+  ) || (rm -rf "${install_path}"; exit 1)
+
+  rm -rf "${tmp_dir}"
+}
+
+install_flyctl "${ASDF_INSTALL_TYPE}" "${ASDF_INSTALL_VERSION}" "${ASDF_INSTALL_PATH}"
